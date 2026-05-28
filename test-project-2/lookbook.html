@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flip Clock — Direction Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Spline+Sans+Mono:wght@400;500;600&family=Hanken+Grotesk:wght@400;500;700;800&family=Anton&family=Sometype+Mono:wght@400;500&family=Familjen+Grotesk:wght@400;500;700&family=Major+Mono+Display&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --pg:    oklch(0.20 0.012 250);
+    --pg-2:  oklch(0.245 0.014 250);
+    --line:  oklch(0.36 0.018 250);
+    --tx:    oklch(0.93 0.008 250);
+    --tx-mut:oklch(0.70 0.012 250);
+    --tx-fnt:oklch(0.56 0.012 250);
+    --mark:  oklch(0.66 0.155 48);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(120% 80% at 80% -10%, var(--pg-2) 0%, transparent 55%),
+      var(--pg);
+    color: var(--tx);
+    font-family: "Sometype Mono", ui-monospace, monospace;
+    line-height: 1.55;
+    padding: clamp(1.6rem, 5vw, 4rem) clamp(1.2rem, 5vw, 4rem) 5rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  /* ---- Masthead ---- */
+  .kicker {
+    font-size: 0.72rem; letter-spacing: 0.34em; text-transform: uppercase;
+    color: var(--mark); margin-bottom: 1.1rem;
+  }
+  .kicker::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--mark); margin-right: 0.7em; transform: translateY(-2px);
+  }
+  h1 {
+    font-family: "Archivo", sans-serif; font-weight: 900;
+    font-size: clamp(2.1rem, 6vw, 4rem); line-height: 0.98;
+    letter-spacing: -0.02em; max-width: 16ch;
+  }
+  .lede {
+    margin-top: 1.4rem; max-width: 62ch; color: var(--tx-mut);
+    font-size: clamp(0.92rem, 1.6vw, 1.05rem);
+  }
+  .lede b { color: var(--tx); font-weight: 500; }
+
+  .rule {
+    height: 1px; background: var(--line); border: 0;
+    margin: clamp(2.4rem, 6vw, 4rem) 0 clamp(1.6rem, 4vw, 2.4rem);
+  }
+  .sec-label {
+    font-size: 0.72rem; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--tx-fnt); margin-bottom: 1.6rem;
+    display: flex; align-items: baseline; gap: 0.8rem;
+  }
+  .sec-label span { color: var(--mark); }
+
+  /* ---- Direction cards ---- */
+  .cards {
+    display: grid; gap: clamp(1rem, 2.5vw, 1.6rem);
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  }
+  .card {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    display: flex; flex-direction: column; background: oklch(0.225 0.012 250);
+  }
+  .stage {
+    padding: clamp(1.6rem, 4vw, 2.6rem) 1rem;
+    display: grid; place-items: center;
+    min-height: 190px;
+  }
+  .card-body { padding: 1.2rem 1.3rem 1.5rem; }
+  .num-tag {
+    font-size: 0.7rem; letter-spacing: 0.2em; color: var(--tx-fnt);
+  }
+  .card h2 {
+    font-family: "Archivo", sans-serif; font-weight: 800;
+    font-size: 1.18rem; letter-spacing: -0.01em; margin: 0.2rem 0 0.5rem;
+  }
+  .pov { color: var(--tx-mut); font-size: 0.86rem; min-height: 3.6em; }
+  .meta {
+    margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--line);
+    font-size: 0.74rem; color: var(--tx-fnt); letter-spacing: 0.04em;
+    display: grid; gap: 0.35rem;
+  }
+  .meta b { color: var(--tx-mut); font-weight: 500; }
+  .sw { display: flex; gap: 5px; margin-top: 0.7rem; }
+  .sw i { width: 22px; height: 22px; border-radius: 5px; display: block; border: 1px solid oklch(1 0 0 / 0.08); }
+
+  /* ---- Flap mockup (themed per card via custom props) ---- */
+  .flapset {
+    --h: 92px; --w: calc(var(--h) * 0.72); --r: 7px; --fs: calc(var(--h) * 0.78);
+    display: flex; gap: 4px;
+  }
+  .mflap {
+    position: relative; width: var(--w); height: var(--h); border-radius: var(--r);
+    font-family: var(--digit-font, "Archivo", sans-serif); font-weight: var(--digit-wt, 800);
+    font-size: var(--fs); line-height: 1; font-variant-numeric: tabular-nums;
+    box-shadow: 0 8px 16px oklch(0 0 0 / 0.4);
+  }
+  .mflap .mh {
+    position: absolute; left: 0; width: 100%; height: calc(50% - 1px);
+    overflow: hidden;
+  }
+  .mflap .mh span {
+    position: absolute; left: 0; right: 0; height: var(--h); line-height: var(--h);
+    text-align: center; color: var(--digit-col, oklch(0.24 0.02 56));
+  }
+  .mflap .top    { top: 0; border-radius: var(--r) var(--r) 0 0; background: var(--face-top); box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.35); }
+  .mflap .bottom { bottom: 0; border-radius: 0 0 var(--r) var(--r); background: var(--face-bot); box-shadow: inset 0 1px 1px oklch(0 0 0 / 0.25); }
+  .mflap .top span { top: 0; }
+  .mflap .bottom span { bottom: 0; }
+  .mcolon { align-self: center; display: grid; gap: 14px; padding: 0 4px; }
+  .mcolon i { width: 7px; height: 7px; border-radius: 50%; display: block; background: var(--colon, oklch(0.6 0.02 250)); }
+
+  /* ---- References ---- */
+  .refs { display: grid; gap: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .ref {
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    background: oklch(0.225 0.012 250);
+  }
+  .ref figure { margin: 0; }
+  .ref svg { display: block; width: 100%; height: 130px; }
+  .ref figcaption { padding: 0.85rem 1rem 1.05rem; }
+  .ref h3 { font-family: "Archivo", sans-serif; font-size: 0.95rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .ref p { font-size: 0.78rem; color: var(--tx-mut); }
+  .ref a { color: var(--mark); text-decoration: none; font-size: 0.74rem; letter-spacing: 0.04em; }
+  .ref a:hover { text-decoration: underline; }
+  .note {
+    margin-top: 1.4rem; font-size: 0.78rem; color: var(--tx-fnt);
+    border-left: 1px solid var(--line); padding-left: 1rem; max-width: 70ch;
+  }
+
+  .foot {
+    margin-top: clamp(2.4rem, 6vw, 4rem); padding-top: 1.4rem; border-top: 1px solid var(--line);
+    font-size: 0.78rem; color: var(--tx-mut); display: flex; flex-wrap: wrap; gap: 0.6rem 2rem;
+  }
+  .foot b { color: var(--tx); font-weight: 500; }
+  code { background: oklch(0.27 0.012 250); padding: 0.1em 0.45em; border-radius: 4px; font-size: 0.85em; color: var(--tx); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">Direction Preview</p>
+  <h1>Four ways the flip clock could feel.</h1>
+  <p class="lede">
+    This is a preview, not the finished clock. Each card below is a static sample of one digit pair
+    rendered in a candidate direction, with its palette and type. <b>Direction 01 is what currently ships
+    in <code>index.html</code>.</b> Pick one (or mix notes from a few) and the live clock gets retuned to match.
+  </p>
+
+  <hr class="rule" />
+  <p class="sec-label">Directions <span>/ pick one</span></p>
+
+  <div class="cards">
+
+    <!-- 01 -->
+    <article class="card">
+      <div class="stage" style="background:
+            radial-gradient(120% 90% at 50% 30%, oklch(0.255 0.035 72) 0%, transparent 60%),
+            oklch(0.158 0.018 58);">
+        <div class="flapset" style="--face-top:linear-gradient(180deg,oklch(0.935 0.012 86),oklch(0.91 0.013 85));
+              --face-bot:linear-gradient(180deg,oklch(0.885 0.015 84),oklch(0.855 0.016 83));
+              --digit-col:oklch(0.235 0.02 56); --digit-font:'Archivo',sans-serif; --colon:oklch(0.5 0.02 66);">
+          <div class="mflap"><div class="mh top"><span>1</span></div><div class="mh bottom"><span>1</span></div></div>
+          <div class="mflap"><div class="mh top"><span>2</span></div><div class="mh bottom"><span>2</span></div></div>
+          <div class="mcolon"><i></i><i></i></div>
+          <div class="mflap" style="--face-top:linear-gradient(180deg,oklch(0.66 0.155 48),oklch(0.63 0.155 47));
+                --face-bot:linear-gradient(180deg,oklch(0.585 0.15 45),oklch(0.55 0.148 44)); --digit-col:oklch(0.975 0.025 86);">
+            <div class="mh top"><span>0</span></div><div class="mh bottom"><span>0</span></div></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="num-tag">01 — currently shipping</p>
+        <h2>Solari Espresso</h2>
+        <p class="pov">A dim desk at dusk: ivory flaps glow against warm espresso, with the racing seconds cast in burnt orange.</p>
+        <div class="sw">
+          <i style="background:oklch(0.158 0.018 58)"></i>
+          <i style="background:oklch(0.93 0.012 86)"></i>
+          <i style="background:oklch(0.66 0.155 48)"></i>
+          <i style="background:oklch(0.235 0.02 56)"></i>
+        </div>
+        <div class="meta"><span><b>Type</b> · Archivo + Spline Sans Mono</span><span><b>Mood</b> · warm, mechanical, nocturnal</span></div>
+      </div>
+    </article>
+
+    <!-- 02 -->
+    <article class="card">
+      <div class="stage" style="background:
+            radial-gradient(120% 90% at 50% 20%, oklch(0.97 0.02 90) 0%, oklch(0.93 0.03 88) 70%);">
+        <div class="flapset" style="--face-top:linear-gradient(180deg,oklch(0.99 0.01 92),oklch(0.965 0.012 90));
+              --face-bot:linear-gradient(180deg,oklch(0.95 0.014 88),oklch(0.925 0.016 86));
+              --digit-col:oklch(0.32 0.05 42); --digit-font:'Hanken Grotesk',sans-serif; --digit-wt:800; --colon:oklch(0.7 0.13 50);">
+          <div class="mflap"><div class="mh top"><span>1</span></div><div class="mh bottom"><span>1</span></div></div>
+          <div class="mflap"><div class="mh top"><span>2</span></div><div class="mh bottom"><span>2</span></div></div>
+          <div class="mcolon"><i></i><i></i></div>
+          <div class="mflap"><div class="mh top"><span>0</span></div><div class="mh bottom"><span>0</span></div></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="num-tag">02</p>
+        <h2>Daylight Cifra</h2>
+        <p class="pov">A bright mid-century object on a sunlit shelf: bone-white flaps, ink-brown numerals, the optimism of a 1966 plastic case.</p>
+        <div class="sw">
+          <i style="background:oklch(0.95 0.03 88)"></i>
+          <i style="background:oklch(0.99 0.01 92)"></i>
+          <i style="background:oklch(0.32 0.05 42)"></i>
+          <i style="background:oklch(0.7 0.13 50)"></i>
+        </div>
+        <div class="meta"><span><b>Type</b> · Hanken Grotesk</span><span><b>Mood</b> · clean, optimistic, daytime</span></div>
+      </div>
+    </article>
+
+    <!-- 03 -->
+    <article class="card">
+      <div class="stage" style="background:
+            radial-gradient(120% 90% at 50% 35%, oklch(0.26 0.03 200) 0%, transparent 60%),
+            oklch(0.165 0.02 240);">
+        <div class="flapset" style="--face-top:linear-gradient(180deg,oklch(0.30 0.022 235),oklch(0.27 0.022 235));
+              --face-bot:linear-gradient(180deg,oklch(0.245 0.02 235),oklch(0.215 0.02 235));
+              --digit-col:oklch(0.86 0.11 175); --digit-font:'Major Mono Display',monospace; --digit-wt:400; --colon:oklch(0.7 0.12 175);">
+          <div class="mflap"><div class="mh top"><span>1</span></div><div class="mh bottom"><span>1</span></div></div>
+          <div class="mflap"><div class="mh top"><span>2</span></div><div class="mh bottom"><span>2</span></div></div>
+          <div class="mcolon"><i></i><i></i></div>
+          <div class="mflap"><div class="mh top"><span>0</span></div><div class="mh bottom"><span>0</span></div></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="num-tag">03</p>
+        <h2>Instrument Panel</h2>
+        <p class="pov">A cockpit gauge at 2am: graphite flaps with a faint phosphor-green readout, quiet and precise.</p>
+        <div class="sw">
+          <i style="background:oklch(0.165 0.02 240)"></i>
+          <i style="background:oklch(0.28 0.022 235)"></i>
+          <i style="background:oklch(0.86 0.11 175)"></i>
+          <i style="background:oklch(0.7 0.12 175)"></i>
+        </div>
+        <div class="meta"><span><b>Type</b> · Major Mono Display</span><span><b>Mood</b> · technical, hushed, after-hours</span></div>
+      </div>
+    </article>
+
+    <!-- 04 -->
+    <article class="card">
+      <div class="stage" style="background:
+            radial-gradient(120% 90% at 50% 30%, oklch(0.24 0.012 250) 0%, transparent 60%),
+            oklch(0.135 0.008 250);">
+        <div class="flapset" style="--h:96px; --face-top:linear-gradient(180deg,oklch(0.26 0.01 250),oklch(0.225 0.01 250));
+              --face-bot:linear-gradient(180deg,oklch(0.20 0.01 250),oklch(0.175 0.01 250));
+              --digit-col:oklch(0.97 0.015 95); --digit-font:'Anton',sans-serif; --digit-wt:400; --colon:oklch(0.85 0.16 90);">
+          <div class="mflap"><div class="mh top"><span>1</span></div><div class="mh bottom"><span>1</span></div></div>
+          <div class="mflap"><div class="mh top"><span>2</span></div><div class="mh bottom"><span>2</span></div></div>
+          <div class="mcolon"><i></i><i></i></div>
+          <div class="mflap" style="--digit-col:oklch(0.85 0.16 90);"><div class="mh top"><span>0</span></div><div class="mh bottom"><span>0</span></div></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="num-tag">04</p>
+        <h2>Transit Board</h2>
+        <p class="pov">A station concourse at full scale: near-black slats, tall condensed numerals, a single amber departure glowing on the seconds.</p>
+        <div class="sw">
+          <i style="background:oklch(0.135 0.008 250)"></i>
+          <i style="background:oklch(0.24 0.01 250)"></i>
+          <i style="background:oklch(0.97 0.015 95)"></i>
+          <i style="background:oklch(0.85 0.16 90)"></i>
+        </div>
+        <div class="meta"><span><b>Type</b> · Anton + Familjen Grotesk</span><span><b>Mood</b> · bold, public, high-contrast</span></div>
+      </div>
+    </article>
+
+  </div>
+
+  <hr class="rule" />
+  <p class="sec-label">References <span>/ the lineage</span></p>
+
+  <div class="refs">
+
+    <article class="ref">
+      <figure>
+        <svg viewBox="0 0 300 130" role="img" aria-label="Abstract split-flap board, rows of dark slats over orange">
+          <rect width="300" height="130" fill="oklch(0.62 0.15 47)"/>
+          <g fill="oklch(0.2 0.015 60)">
+            <rect x="14" y="16" width="38" height="42" rx="3"/><rect x="58" y="16" width="38" height="42" rx="3"/>
+            <rect x="102" y="16" width="38" height="42" rx="3"/><rect x="160" y="16" width="38" height="42" rx="3"/>
+            <rect x="204" y="16" width="38" height="42" rx="3"/><rect x="248" y="16" width="38" height="42" rx="3"/>
+            <rect x="14" y="72" width="38" height="42" rx="3"/><rect x="58" y="72" width="38" height="42" rx="3"/>
+            <rect x="102" y="72" width="38" height="42" rx="3"/><rect x="160" y="72" width="38" height="42" rx="3"/>
+            <rect x="204" y="72" width="38" height="42" rx="3"/><rect x="248" y="72" width="38" height="42" rx="3"/>
+          </g>
+          <g stroke="oklch(0.5 0.13 45)" stroke-width="1.5">
+            <line x1="14" y1="37" x2="52" y2="37"/><line x1="58" y1="37" x2="96" y2="37"/><line x1="102" y1="37" x2="140" y2="37"/>
+            <line x1="160" y1="37" x2="198" y2="37"/><line x1="204" y1="37" x2="242" y2="37"/><line x1="248" y1="37" x2="286" y2="37"/>
+          </g>
+        </svg>
+      </figure>
+      <figcaption>
+        <h3>Solari board</h3>
+        <p>The arrivals-and-departures display whose mechanical clatter defined the European train station.</p>
+        <a href="https://en.wikipedia.org/wiki/Solari_board" target="_blank" rel="noopener">Wikipedia ↗</a>
+      </figcaption>
+    </article>
+
+    <article class="ref">
+      <figure>
+        <svg viewBox="0 0 300 130" role="img" aria-label="Stylized Cifra 3 desk clock in an orange case">
+          <rect width="300" height="130" fill="oklch(0.93 0.03 88)"/>
+          <rect x="60" y="22" width="180" height="86" rx="16" fill="oklch(0.64 0.16 47)"/>
+          <rect x="86" y="40" width="58" height="50" rx="5" fill="oklch(0.97 0.012 90)"/>
+          <rect x="156" y="40" width="58" height="50" rx="5" fill="oklch(0.97 0.012 90)"/>
+          <line x1="86" y1="65" x2="144" y2="65" stroke="oklch(0.7 0.1 50)" stroke-width="2"/>
+          <line x1="156" y1="65" x2="214" y2="65" stroke="oklch(0.7 0.1 50)" stroke-width="2"/>
+          <text x="115" y="80" font-family="Archivo, sans-serif" font-weight="800" font-size="40" text-anchor="middle" fill="oklch(0.3 0.04 42)">1</text>
+          <text x="185" y="80" font-family="Archivo, sans-serif" font-weight="800" font-size="40" text-anchor="middle" fill="oklch(0.3 0.04 42)">0</text>
+        </svg>
+      </figure>
+      <figcaption>
+        <h3>Cifra 3 — Gino Valle, 1966</h3>
+        <p>The Solari domestic flip clock that put the departure board on the bedside table. A MoMA-collection icon.</p>
+        <a href="https://en.wikipedia.org/wiki/Gino_Valle" target="_blank" rel="noopener">Wikipedia ↗</a>
+      </figcaption>
+    </article>
+
+    <article class="ref">
+      <figure>
+        <svg viewBox="0 0 300 130" role="img" aria-label="Single split-flap card mid-flip">
+          <rect width="300" height="130" fill="oklch(0.22 0.012 250)"/>
+          <rect x="105" y="20" width="90" height="90" rx="8" fill="oklch(0.9 0.013 85)"/>
+          <line x1="105" y1="65" x2="195" y2="65" stroke="oklch(0.2 0.015 60)" stroke-width="3"/>
+          <path d="M105 65 L195 65 L188 50 L112 50 Z" fill="oklch(0.82 0.014 85)"/>
+          <text x="150" y="80" font-family="Archivo, sans-serif" font-weight="800" font-size="56" text-anchor="middle" fill="oklch(0.24 0.02 56)">7</text>
+        </svg>
+      </figure>
+      <figcaption>
+        <h3>Split-flap display</h3>
+        <p>The mechanism itself: a stack of hinged leaves snapping over to reveal the next character.</p>
+        <a href="https://en.wikipedia.org/wiki/Split-flap_display" target="_blank" rel="noopener">Wikipedia ↗</a>
+      </figcaption>
+    </article>
+
+    <article class="ref">
+      <figure>
+        <svg viewBox="0 0 300 130" role="img" aria-label="Vintage flip alarm clock silhouette">
+          <rect width="300" height="130" fill="oklch(0.26 0.02 250)"/>
+          <rect x="70" y="30" width="160" height="70" rx="34" fill="oklch(0.18 0.012 250)"/>
+          <rect x="92" y="46" width="48" height="38" rx="4" fill="oklch(0.92 0.012 90)"/>
+          <rect x="160" y="46" width="48" height="38" rx="4" fill="oklch(0.92 0.012 90)"/>
+          <line x1="92" y1="65" x2="140" y2="65" stroke="oklch(0.2 0.01 250)" stroke-width="2"/>
+          <line x1="160" y1="65" x2="208" y2="65" stroke="oklch(0.2 0.01 250)" stroke-width="2"/>
+          <text x="116" y="78" font-family="Archivo, sans-serif" font-weight="800" font-size="30" text-anchor="middle" fill="oklch(0.25 0.02 250)">6</text>
+          <text x="184" y="78" font-family="Archivo, sans-serif" font-weight="800" font-size="30" text-anchor="middle" fill="oklch(0.25 0.02 250)">3</text>
+        </svg>
+      </figure>
+      <figcaption>
+        <h3>Copal / Sankyo flip clocks</h3>
+        <p>The 1970s bedside flip alarm: the same mechanism, shrunk into warm plastic consumer design.</p>
+        <a href="https://en.wikipedia.org/wiki/Flip_clock" target="_blank" rel="noopener">Wikipedia ↗</a>
+      </figcaption>
+    </article>
+
+  </div>
+
+  <p class="note">
+    On imagery: this environment blocks network access, so I could not verify live reference photos (Unsplash and similar)
+    would load. Rather than risk broken images, the reference tiles above are drawn as SVG. The links go to authoritative pages
+    you can open in your browser. Grant web access and I will swap in verified photography.
+  </p>
+
+  <div class="foot">
+    <span><b>Next:</b> tell me a direction number (or notes).</span>
+    <span>I retune <code>index.html</code> to match, keeping the working flip mechanics.</span>
+  </div>
+
+</div>
+</body>
+</html>

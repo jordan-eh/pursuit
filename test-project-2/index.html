@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Flip Clock</title>
+<meta name="description" content="A split-flap flip clock showing your local time, with offline arcade games below." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    /* Daylight Cifra — bright cream room, bone-white flaps, ink-brown numerals */
+    --bg:        oklch(0.930 0.032 85);
+    --bg-glow:   oklch(0.975 0.024 92);
+    --face-t-hi: oklch(0.992 0.010 92);
+    --face-t-lo: oklch(0.965 0.012 90);
+    --face-b-hi: oklch(0.952 0.014 88);
+    --face-b-lo: oklch(0.922 0.016 86);
+    --digit:     oklch(0.320 0.050 42);
+    --accent:    oklch(0.665 0.150 50);
+    --muted:     oklch(0.430 0.045 50);
+    --faint:     oklch(0.580 0.035 55);
+    --hinge:     oklch(0.700 0.030 70 / 0.55);
+
+    --flap-h: clamp(3.6rem, 14vw, 8rem);
+    --flap-w: calc(var(--flap-h) * 0.72);
+    --flap-r: calc(var(--flap-h) * 0.085);
+    --flap-fs: calc(var(--flap-h) * 0.74);
+    --gap: 2px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100svh;
+    background: var(--bg);
+    color: var(--digit);
+    font-family: "Hanken Grotesk", system-ui, sans-serif;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: clamp(1.4rem, 3.5vw, 2.2rem);
+    padding: 2.5rem 1rem 3rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(120% 85% at 50% 12%, var(--bg-glow) 0%, transparent 62%),
+      radial-gradient(150% 130% at 50% 130%, oklch(0.88 0.035 78) 0%, transparent 55%);
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    opacity: 0.035; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  main, .date, .arcade { position: relative; z-index: 2; }
+
+  .clock { display: flex; align-items: stretch; gap: clamp(0.5rem, 1.8vw, 1.1rem); }
+  .group { display: flex; gap: var(--gap); }
+
+  .sep {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    gap: calc(var(--flap-h) * 0.18); padding: 0 calc(var(--flap-h) * 0.04);
+  }
+  .sep i {
+    width: calc(var(--flap-h) * 0.085); height: calc(var(--flap-h) * 0.085);
+    border-radius: 50%; background: var(--faint); display: block;
+  }
+  .sep--live i { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { background: var(--accent); box-shadow: 0 0 12px var(--accent); } }
+
+  /* ---- AM / PM indicator (current period only) ---- */
+  .period {
+    display: flex; flex-direction: column; justify-content: center;
+    padding-left: calc(var(--flap-h) * 0.06);
+    font-size: clamp(0.72rem, 1.9vw, 1.15rem); font-weight: 800; letter-spacing: 0.12em;
+  }
+  .period span { color: var(--accent); }
+
+  /* ---- Flap unit ---- */
+  .flap {
+    position: relative; width: var(--flap-w); height: var(--flap-h); perspective: 380px;
+    font-weight: 800; font-size: var(--flap-fs); line-height: 1;
+    font-variant-numeric: tabular-nums; border-radius: var(--flap-r);
+    filter: drop-shadow(0 calc(var(--flap-h) * 0.06) calc(var(--flap-h) * 0.1) oklch(0.5 0.05 50 / 0.28));
+  }
+  .half, .fold {
+    position: absolute; left: 0; width: 100%; height: calc(50% - var(--gap) / 2);
+    overflow: hidden; backface-visibility: hidden;
+  }
+  .half .num, .fold .num {
+    position: absolute; left: 0; right: 0; height: var(--flap-h); line-height: var(--flap-h);
+    text-align: center; color: var(--digit);
+  }
+  .half--top, .fold--front {
+    top: 0; border-radius: var(--flap-r) var(--flap-r) 0 0;
+    background: linear-gradient(180deg, var(--face-t-hi) 0%, var(--face-t-lo) 100%);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), inset 0 -7px 9px -7px var(--hinge);
+  }
+  .half--top .num, .fold--front .num { top: 0; }
+  .half--bottom, .fold--back {
+    bottom: 0; border-radius: 0 0 var(--flap-r) var(--flap-r);
+    background: linear-gradient(180deg, var(--face-b-hi) 0%, var(--face-b-lo) 100%);
+    box-shadow: inset 0 7px 9px -7px var(--hinge), inset 0 -1px 0 oklch(1 0 0 / 0.35);
+  }
+  .half--bottom .num, .fold--back .num { bottom: 0; }
+  .fold { z-index: 2; }
+  .fold--front { transform-origin: bottom; }
+  .fold--back  { transform-origin: top; transform: rotateX(90deg); }
+  .flap.is-flipping .fold--front { animation: fold-top 0.32s ease-in forwards; }
+  .flap.is-flipping .fold--back  { animation: fold-bottom 0.34s var(--ease-out) 0.30s forwards; }
+  @keyframes fold-top    { 0% { transform: rotateX(0deg);  } 100% { transform: rotateX(-90deg); } }
+  @keyframes fold-bottom { 0% { transform: rotateX(90deg); } 100% { transform: rotateX(0deg);   } }
+  .flap:not(.is-flipping) .fold { visibility: hidden; }
+
+  /* ---- Date ---- */
+  .date {
+    font-size: clamp(0.78rem, 2.4vw, 1.1rem); letter-spacing: clamp(0.2em, 0.8vw, 0.46em);
+    text-transform: uppercase; color: var(--muted); font-weight: 500; text-align: center;
+  }
+  .date b { color: var(--digit); font-weight: 700; }
+
+  /* ---- Arcade ---- */
+  .arcade {
+    width: min(600px, 92vw);
+    margin-top: clamp(2.4rem, 7vw, 5rem);   /* breathing room below the clock */
+    display: flex; flex-direction: column; align-items: center; gap: 0.95rem;
+  }
+  .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+  .tab {
+    appearance: none; border: 1px solid var(--hinge); background: transparent;
+    color: var(--muted); font-family: inherit; font-size: 0.7rem; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; padding: 0.5em 1.05em;
+    border-radius: 999px; cursor: pointer;
+    transition: color .3s var(--ease-out), border-color .3s var(--ease-out), background .3s var(--ease-out);
+  }
+  .tab:hover { color: var(--digit); border-color: var(--muted); }
+  .tab.is-active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .arcade canvas { display: block; width: 100%; height: auto; cursor: pointer; touch-action: none; }
+  .game-hint {
+    font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--faint); text-align: center; min-height: 1em;
+  }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flap.is-flipping .fold--front, .flap.is-flipping .fold--back { animation: none; }
+    .sep--live i { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <div class="clock" id="clock" aria-hidden="true"></div>
+  </main>
+  <div class="date" id="date"></div>
+
+  <section class="arcade" aria-label="Offline games">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <canvas id="screen" width="600" height="220" role="img"
+            aria-label="Offline arcade game. Use the buttons above to choose a game."></canvas>
+    <p class="game-hint" id="gameHint"></p>
+  </section>
+
+  <p class="sr-only" id="live" role="status" aria-live="polite"></p>
+
+<script>
+/* ===================== Flip clock ===================== */
+(() => {
+  "use strict";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const clockEl = document.getElementById("clock");
+  const UNITS = [{ key: "h" }, { sep: true }, { key: "m" }, { sep: true, live: true }, { key: "s" }];
+
+  function makeFlap() {
+    const el = document.createElement("div");
+    el.className = "flap";
+    el.innerHTML =
+      '<div class="half half--top"><div class="num">0</div></div>' +
+      '<div class="half half--bottom"><div class="num">0</div></div>' +
+      '<div class="fold fold--front"><div class="num">0</div></div>' +
+      '<div class="fold fold--back"><div class="num">0</div></div>';
+    return {
+      el,
+      topNum: el.querySelector(".half--top .num"),
+      botNum: el.querySelector(".half--bottom .num"),
+      frontNum: el.querySelector(".fold--front .num"),
+      backNum: el.querySelector(".fold--back .num"),
+      back: el.querySelector(".fold--back"),
+      val: null,
+    };
+  }
+
+  const groups = {};
+  UNITS.forEach((u) => {
+    if (u.sep) {
+      const s = document.createElement("div");
+      s.className = "sep" + (u.live ? " sep--live" : "");
+      s.innerHTML = "<i></i><i></i>";
+      clockEl.appendChild(s);
+      return;
+    }
+    const g = document.createElement("div");
+    g.className = "group";
+    const a = makeFlap(), b = makeFlap();
+    g.append(a.el, b.el);
+    clockEl.appendChild(g);
+    groups[u.key] = [a, b];
+  });
+
+  const periodEl = document.createElement("div");
+  periodEl.className = "period";
+  periodEl.innerHTML = "<span></span>";
+  clockEl.appendChild(periodEl);
+  const periodSpan = periodEl.querySelector("span");
+  function setPeriod(isPM) { periodSpan.textContent = isPM ? "PM" : "AM"; }
+  const to12 = (h) => h % 12 || 12;
+
+  function setFlap(f, ch, animate) {
+    if (f.val === ch) return;
+    const prev = f.val;
+    f.val = ch;
+    if (!animate || reduce || prev === null) {
+      f.topNum.textContent = ch; f.botNum.textContent = ch; return;
+    }
+    f.topNum.textContent = ch; f.botNum.textContent = prev;
+    f.frontNum.textContent = prev; f.backNum.textContent = ch;
+    f.el.classList.remove("is-flipping"); void f.el.offsetWidth; f.el.classList.add("is-flipping");
+    const done = () => {
+      f.botNum.textContent = ch; f.el.classList.remove("is-flipping");
+      f.back.removeEventListener("animationend", done);
+    };
+    f.back.addEventListener("animationend", done);
+  }
+  function setUnit(key, value, animate) {
+    const s = String(value).padStart(2, "0");
+    setFlap(groups[key][0], s[0], animate);
+    setFlap(groups[key][1], s[1], animate);
+  }
+
+  const dateEl = document.getElementById("date");
+  const liveEl = document.getElementById("live");
+  let lastDateStr = "";
+  function updateDate(now) {
+    const wd = now.toLocaleDateString(undefined, { weekday: "long" });
+    const day = now.getDate();
+    const mo = now.toLocaleDateString(undefined, { month: "long" });
+    const yr = now.getFullYear();
+    const str = wd + " " + day + " " + mo + " " + yr;
+    if (str !== lastDateStr) {
+      lastDateStr = str;
+      dateEl.innerHTML = `<b>${wd}</b> &nbsp;·&nbsp; ${day} ${mo} ${yr}`;
+    }
+  }
+
+  let started = false;
+  function render() {
+    const now = new Date();
+    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const isPM = h >= 12;
+    setUnit("h", to12(h), started);
+    setUnit("m", m, started);
+    setUnit("s", s, started);
+    setPeriod(isPM);
+    updateDate(now);
+    const hh = String(to12(h)).padStart(2, "0"), mm = String(m).padStart(2, "0");
+    liveEl.textContent = `${hh}:${mm} ${isPM ? "PM" : "AM"}, ${lastDateStr}`;
+    started = true;
+    setTimeout(render, 1000 - (Date.now() % 1000) + 5);
+  }
+
+  function boot() {
+    if (reduce) { render(); return; }
+    const allFlaps = [...groups.h, ...groups.m, ...groups.s];
+    allFlaps.forEach((f) => setFlap(f, String(Math.floor(Math.random() * 10)), false));
+    const now = new Date();
+    const target =
+      String(to12(now.getHours())).padStart(2, "0") +
+      String(now.getMinutes()).padStart(2, "0") +
+      String(now.getSeconds()).padStart(2, "0");
+    setPeriod(now.getHours() >= 12);
+    updateDate(now);
+    allFlaps.forEach((f, i) => setTimeout(() => setFlap(f, target[i], true), 90 + i * 110));
+    setTimeout(() => { started = true; render(); }, 90 + allFlaps.length * 110 + 400);
+  }
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(boot);
+    setTimeout(() => { if (groups.h[0].val === null) boot(); }, 800);
+  } else { boot(); }
+})();
+
+/* ===================== Offline arcade ===================== */
+(() => {
+  "use strict";
+  const cv = document.getElementById("screen");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const hintEl = document.getElementById("gameHint");
+  const tabsEl = document.getElementById("tabs");
+
+  const W = 600, H = 220;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr; ctx.scale(dpr, dpr);
+
+  const INK = "#4a3422", ACC = "#c56a2c", FAINT = "#9b8674", CREAM = "#f6eede";
+  const ri = (n) => Math.floor(Math.random() * n);
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const canRound = typeof ctx.roundRect === "function";
+  function rr(x, y, w, h, r) { ctx.beginPath(); canRound ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); ctx.fill(); }
+  const loadHi = (k) => parseInt(localStorage.getItem("flipclock_" + k) || "0", 10) || 0;
+  const saveHi = (k, v) => localStorage.setItem("flipclock_" + k, String(v));
+
+  function hud(score, hi) {
+    ctx.textBaseline = "alphabetic"; ctx.textAlign = "right";
+    ctx.fillStyle = INK; ctx.font = '700 15px "Hanken Grotesk", system-ui, sans-serif';
+    ctx.fillText(String(score).padStart(5, "0"), W - 6, 22);
+    if (hi > 0) {
+      ctx.fillStyle = FAINT; ctx.font = '500 13px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText("HI " + String(hi).padStart(5, "0"), W - 86, 22);
+    }
+    ctx.textAlign = "left";
+  }
+  function banner(text, sub) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = ACC; ctx.font = '800 24px "Hanken Grotesk", system-ui, sans-serif';
+    ctx.fillText(text, W / 2, H / 2 - 2);
+    if (sub) {
+      ctx.fillStyle = FAINT; ctx.font = '500 12px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText(sub, W / 2, H / 2 + 20);
+    }
+    ctx.textAlign = "left";
+  }
+  function frame() {
+    ctx.strokeStyle = FAINT; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+    ctx.strokeRect(1.5, 1.5, W - 3, H - 3); ctx.globalAlpha = 1;
+  }
+
+  /* ---------------- DINO ---------------- */
+  function makeDino() {
+    const GY = H - 30, X = 54, DW = 44, DH = 47, DKW = 60, DKH = 28, G = 2500, JV = -640;
+    let state = "ready", hi = loadHi("dino");
+    let speed, dist, score, obs, nextSpawn, scroll, birdAnim;
+    const d = { y: 0, vy: 0, onG: true, duck: false, lt: 0, lf: 0 };
+
+    function reset() {
+      speed = 300; dist = 0; score = 0; obs = []; nextSpawn = 90; scroll = 0; birdAnim = 0;
+      d.y = GY - DH; d.vy = 0; d.onG = true; d.duck = false; d.lt = 0; d.lf = 0; state = "ready";
+    }
+    function jump() { if (d.onG) { d.onG = false; d.vy = JV; d.y = GY - DH; } }
+    function press() { if (state === "ready" || state === "over") { reset(); state = "running"; jump(); } else jump(); }
+    function key(c, down) {
+      if (c === "ArrowDown" || c === "KeyS") { if (state === "running") d.duck = down; }
+      else if ((c === "ArrowUp" || c === "KeyW") && down) press();
+    }
+    function swipe(dir) { if (dir === "U") press(); else if (dir === "D" && state === "running") { d.duck = true; setTimeout(() => d.duck = false, 380); } }
+    function move() {}
+    function spawn() {
+      if (score > 240 && Math.random() < 0.32) {
+        const hs = [GY - 46, GY - 72, GY - 96];
+        obs.push({ type: "bird", x: W + 20, y: hs[ri(3)], w: 42, h: 26 });
+      } else {
+        const v = ri(3), h = v === 1 ? 50 : 36, trunks = v === 2 ? 2 + ri(2) : 1;
+        obs.push({ type: "cactus", x: W + 20, y: GY - h, w: trunks * 16 + 6, h, trunks });
+      }
+      nextSpawn = dist + speed * (0.95 + Math.random() * 0.9);
+    }
+    function update(dt) {
+      if (state !== "running") return;
+      dist += speed * dt; speed = Math.min(640, speed + 11 * dt);
+      score = Math.floor(dist / 7); scroll = (scroll + speed * dt) % 24; birdAnim += dt;
+      if (!d.onG) {
+        d.vy += G * dt; if (d.duck) d.vy += G * 1.7 * dt; d.y += d.vy * dt;
+        const fl = GY - DH; if (d.y >= fl) { d.y = fl; d.vy = 0; d.onG = true; }
+      } else {
+        d.y = GY - (d.duck ? DKH : DH);
+        d.lt += dt; if (d.lt > 0.09) { d.lf ^= 1; d.lt = 0; }
+      }
+      for (const o of obs) o.x -= speed * dt;
+      obs = obs.filter((o) => o.x + o.w > -10);
+      if (dist >= nextSpawn) spawn();
+      const dk = d.duck && d.onG, dw = dk ? DKW : DW, dh = dk ? DKH : DH;
+      const db = { x: X + 6, y: d.y + 5, w: dw - 14, h: dh - 8 };
+      for (const o of obs) {
+        const ob = { x: o.x + 4, y: o.y + 4, w: o.w - 8, h: o.h - 6 };
+        if (db.x < ob.x + ob.w && db.x + db.w > ob.x && db.y < ob.y + ob.h && db.y + db.h > ob.y) {
+          state = "over"; if (score > hi) { hi = score; saveHi("dino", hi); }
+        }
+      }
+    }
+    function drawDino() {
+      const dk = d.duck && d.onG, x = X, y = d.y;
+      ctx.fillStyle = INK;
+      if (dk) {
+        ctx.fillRect(x, y + 2, 46, DKH - 2); ctx.fillRect(x + 40, y, 20, 14);
+        ctx.fillStyle = CREAM; ctx.fillRect(x + 52, y + 3, 3, 3); ctx.fillStyle = INK;
+        ctx.fillRect(x + 10, y + DKH, 7, d.lf ? 8 : 5); ctx.fillRect(x + 26, y + DKH, 7, d.lf ? 5 : 8);
+        return;
+      }
+      ctx.fillRect(x, y + 14, 12, 10); ctx.fillRect(x + 8, y + 12, 22, 20);
+      ctx.fillRect(x + 10, y + 30, 18, 9); ctx.fillRect(x + 26, y, 18, 21);
+      ctx.fillRect(x + 30, y + 16, 14, 6); ctx.fillRect(x + 27, y + 24, 7, 4);
+      ctx.fillStyle = CREAM; ctx.fillRect(x + 37, y + 5, 4, 4); ctx.fillStyle = INK;
+      if (d.onG && state === "running") {
+        ctx.fillRect(x + 12, y + 39, 7, d.lf ? 8 : 4); ctx.fillRect(x + 22, y + 39, 7, d.lf ? 4 : 8);
+      } else { ctx.fillRect(x + 12, y + 39, 7, 8); ctx.fillRect(x + 22, y + 39, 7, 8); }
+    }
+    function draw() {
+      ctx.strokeStyle = FAINT; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, GY + 2); ctx.lineTo(W, GY + 2); ctx.stroke();
+      ctx.fillStyle = FAINT;
+      for (let x = -scroll; x < W; x += 24) { ctx.fillRect(x, GY + 7, 3, 2); ctx.fillRect(x + 12, GY + 10, 2, 2); }
+      for (const o of obs) {
+        ctx.fillStyle = INK;
+        if (o.type === "bird") {
+          ctx.fillRect(o.x + 8, o.y + 9, 24, 8); ctx.fillRect(o.x + 30, o.y + 6, 12, 6);
+          const up = Math.floor(birdAnim * 6) % 2 === 0;
+          ctx.fillRect(o.x + 10, up ? o.y - 5 : o.y + 15, 16, 11);
+        } else {
+          for (let i = 0; i < o.trunks; i++) {
+            const cx = o.x + 3 + i * 16;
+            ctx.fillRect(cx + 4, o.y, 6, o.h);
+            ctx.fillRect(cx, o.y + o.h * 0.45 - 7, 4, 11); ctx.fillRect(cx, o.y + o.h * 0.45 + 1, 4, 3);
+            ctx.fillRect(cx + 10, o.y + o.h * 0.32 - 7, 4, 11); ctx.fillRect(cx + 10, o.y + o.h * 0.32 + 1, 4, 3);
+          }
+        }
+      }
+      drawDino();
+      hud(score, hi);
+      if (state === "over") banner("GAME OVER");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to restart"
+        : state === "ready" ? "Space or tap to jump · ↓ to duck" : "↑ jump · ↓ duck";
+    }
+    reset();
+    return { title: "Dino", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- SNAKE ---------------- */
+  function makeSnake() {
+    const C = 20, COLS = W / C, ROWS = H / C;
+    let state = "ready", hi = loadHi("snake");
+    let snake, dir, pend, food, timer, score;
+    function place() { let p; do { p = { x: ri(COLS), y: ri(ROWS) }; } while (snake.some((s) => s.x === p.x && s.y === p.y)); food = p; }
+    function reset() {
+      snake = [{ x: 9, y: 5 }, { x: 8, y: 5 }, { x: 7, y: 5 }];
+      dir = { x: 1, y: 0 }; pend = { x: 1, y: 0 }; timer = 0; score = 0; state = "ready"; place();
+    }
+    function press() { if (state === "ready") state = "running"; else if (state === "over") { reset(); state = "running"; } }
+    function turn(nx, ny) { if (state !== "running") return; if (nx === -dir.x && ny === -dir.y) return; pend = { x: nx, y: ny }; }
+    function key(c, down) {
+      if (!down) return;
+      if (c === "ArrowUp" || c === "KeyW") turn(0, -1);
+      else if (c === "ArrowDown" || c === "KeyS") turn(0, 1);
+      else if (c === "ArrowLeft" || c === "KeyA") turn(-1, 0);
+      else if (c === "ArrowRight" || c === "KeyD") turn(1, 0);
+    }
+    function swipe(d) { if (d === "U") turn(0, -1); else if (d === "D") turn(0, 1); else if (d === "L") turn(-1, 0); else turn(1, 0); }
+    function move() {}
+    function update(dt) {
+      if (state !== "running") return;
+      timer += dt;
+      const step = Math.max(0.065, 0.13 - score * 0.004);
+      if (timer < step) return;
+      timer -= step; dir = pend;
+      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= ROWS || snake.some((s) => s.x === head.x && s.y === head.y)) {
+        state = "over"; if (score > hi) { hi = score; saveHi("snake", hi); } return;
+      }
+      snake.unshift(head);
+      if (head.x === food.x && head.y === food.y) { score++; place(); } else snake.pop();
+    }
+    function draw() {
+      frame();
+      ctx.fillStyle = ACC; rr(food.x * C + 3, food.y * C + 3, C - 6, C - 6, 5);
+      ctx.fillStyle = INK;
+      for (const s of snake) rr(s.x * C + 1.5, s.y * C + 1.5, C - 3, C - 3, 5);
+      hud(score, hi);
+      if (state === "ready") banner("SNAKE", "arrows or swipe · space to start");
+      else if (state === "over") banner("GAME OVER");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to restart"
+        : state === "ready" ? "Arrows or swipe to steer · space to start" : "Steer with arrows or swipe";
+    }
+    reset();
+    return { title: "Snake", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- BREAKOUT ---------------- */
+  function makeBreakout() {
+    const PW = 84, PH = 11, BR = 6, COLS = 10, ROWS = 4, GAP = 6, TOP = 38, BH = 18;
+    const BW = (W - GAP * (COLS + 1)) / COLS;
+    let state = "ready", hi = loadHi("breakout");
+    let paddleX, ball, bricks, score, base, left, right;
+    function build() { bricks = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) bricks.push({ x: GAP + c * (BW + GAP), y: TOP + r * (BH + GAP), row: r, alive: true }); }
+    function reset() {
+      paddleX = (W - PW) / 2; score = 0; base = 240; left = right = false; build();
+      ball = { x: W / 2, y: H - 40, vx: 0, vy: 0, stuck: true }; state = "ready";
+    }
+    function launch() { ball.stuck = false; ball.vx = base * 0.4 * (Math.random() < 0.5 ? -1 : 1); ball.vy = -base * 0.92; }
+    function press() { if (state === "ready") { state = "running"; launch(); } else if (state === "over") { reset(); state = "running"; launch(); } }
+    function key(c, down) { if (c === "ArrowLeft" || c === "KeyA") left = down; else if (c === "ArrowRight" || c === "KeyD") right = down; }
+    function move(x) { paddleX = clamp(x - PW / 2, 4, W - PW - 4); }
+    function swipe() {}
+    function update(dt) {
+      if (state !== "running") return;
+      const ps = 460;
+      if (left) paddleX = clamp(paddleX - ps * dt, 4, W - PW - 4);
+      if (right) paddleX = clamp(paddleX + ps * dt, 4, W - PW - 4);
+      if (ball.stuck) { ball.x = paddleX + PW / 2; return; }
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      if (ball.x - BR < 4) { ball.x = 4 + BR; ball.vx = Math.abs(ball.vx); }
+      if (ball.x + BR > W - 4) { ball.x = W - 4 - BR; ball.vx = -Math.abs(ball.vx); }
+      if (ball.y - BR < 4) { ball.y = 4 + BR; ball.vy = Math.abs(ball.vy); }
+      const py = H - 20;
+      if (ball.vy > 0 && ball.y + BR >= py && ball.y + BR <= py + PH + 8 && ball.x >= paddleX - BR && ball.x <= paddleX + PW + BR) {
+        const hitX = (ball.x - (paddleX + PW / 2)) / (PW / 2);
+        const sp = Math.hypot(ball.vx, ball.vy);
+        ball.vx = sp * 0.7 * clamp(hitX, -1, 1); ball.vy = -Math.abs(sp * 0.8) - 30; ball.y = py - BR;
+      }
+      for (const b of bricks) {
+        if (!b.alive) continue;
+        if (ball.x + BR > b.x && ball.x - BR < b.x + BW && ball.y + BR > b.y && ball.y - BR < b.y + BH) {
+          const ox = Math.min(ball.x + BR - b.x, b.x + BW - (ball.x - BR));
+          const oy = Math.min(ball.y + BR - b.y, b.y + BH - (ball.y - BR));
+          if (ox < oy) ball.vx = -ball.vx; else ball.vy = -ball.vy;
+          b.alive = false; score += 10; break;
+        }
+      }
+      if (!bricks.some((b) => b.alive)) { base *= 1.06; build(); ball.stuck = true; ball.y = H - 40; }
+      if (ball.y - BR > H) { state = "over"; if (score > hi) { hi = score; saveHi("breakout", hi); } }
+    }
+    function draw() {
+      frame();
+      for (const b of bricks) { if (!b.alive) continue; ctx.fillStyle = b.row % 2 ? ACC : INK; rr(b.x, b.y, BW, BH, 3); }
+      ctx.fillStyle = INK; rr(paddleX, H - 20, PW, PH, 5);
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, BR, 0, 7); ctx.fill();
+      hud(score, hi);
+      if (state === "ready") banner("BREAKOUT", "move paddle · space to launch");
+      else if (state === "over") banner("GAME OVER");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to restart"
+        : state === "ready" ? "Move paddle · space to launch" : "Move with mouse or ← →";
+    }
+    reset();
+    return { title: "Breakout", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- PONG ---------------- */
+  function makePong() {
+    const PW = 10, PH = 50, BR = 7, WIN = 7;
+    let state = "ready";
+    let py, ay, ball, ps, as, up, down;
+    function serve(toLeft) {
+      ball = { x: W / 2, y: H / 2, vx: (toLeft ? -1 : 1) * 260, vy: rand(-120, 120) };
+    }
+    function reset() { py = ay = (H - PH) / 2; ps = 0; as = 0; up = down = false; serve(Math.random() < 0.5); state = "ready"; }
+    function press() {
+      if (state === "ready") state = "running";
+      else if (state === "over") { reset(); state = "running"; }
+    }
+    function key(c, down2) { if (c === "ArrowUp" || c === "KeyW") up = down2; else if (c === "ArrowDown" || c === "KeyS") down = down2; }
+    function move(x, y) { py = clamp(y - PH / 2, 0, H - PH); }
+    function swipe() {}
+    function update(dt) {
+      if (state !== "running") return;
+      const sp = 380;
+      if (up) py = clamp(py - sp * dt, 0, H - PH);
+      if (down) py = clamp(py + sp * dt, 0, H - PH);
+      // AI follows ball with capped speed and a little slack
+      const target = ball.y - PH / 2 + rand(-6, 6);
+      ay = clamp(ay + clamp(target - ay, -230 * dt, 230 * dt), 0, H - PH);
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      if (ball.y - BR < 0) { ball.y = BR; ball.vy = Math.abs(ball.vy); }
+      if (ball.y + BR > H) { ball.y = H - BR; ball.vy = -Math.abs(ball.vy); }
+      // player paddle
+      if (ball.vx < 0 && ball.x - BR < 16 + PW && ball.x - BR > 6 && ball.y > py && ball.y < py + PH) {
+        ball.vx = Math.abs(ball.vx) * 1.04; ball.vy += ((ball.y - (py + PH / 2)) / (PH / 2)) * 160; ball.x = 16 + PW + BR;
+      }
+      // ai paddle
+      if (ball.vx > 0 && ball.x + BR > W - 16 - PW && ball.x + BR < W - 6 && ball.y > ay && ball.y < ay + PH) {
+        ball.vx = -Math.abs(ball.vx) * 1.04; ball.vy += ((ball.y - (ay + PH / 2)) / (PH / 2)) * 160; ball.x = W - 16 - PW - BR;
+      }
+      if (ball.x < -10) { as++; if (as >= WIN) state = "over"; else serve(false); }
+      else if (ball.x > W + 10) { ps++; if (ps >= WIN) state = "over"; else serve(true); }
+    }
+    function draw() {
+      frame();
+      ctx.strokeStyle = FAINT; ctx.globalAlpha = 0.5; ctx.lineWidth = 2; ctx.setLineDash([6, 10]);
+      ctx.beginPath(); ctx.moveTo(W / 2, 6); ctx.lineTo(W / 2, H - 6); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.fillStyle = INK; rr(16, py, PW, PH, 4); rr(W - 16 - PW, ay, PW, PH, 4);
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, BR, 0, 7); ctx.fill();
+      ctx.textAlign = "center"; ctx.fillStyle = INK; ctx.font = '800 30px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText(ps, W / 2 - 40, 40); ctx.fillText(as, W / 2 + 40, 40); ctx.textAlign = "left";
+      if (state === "ready") banner("PONG", "↑ ↓ or mouse · space to serve · first to 7");
+      else if (state === "over") banner(ps > as ? "YOU WIN" : "YOU LOSE");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to play again"
+        : state === "ready" ? "Move with ↑ ↓ or mouse · space to serve" : "First to 7 wins";
+    }
+    reset();
+    return { title: "Pong", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- TETRIS ---------------- */
+  function makeTetris() {
+    const COLS = 10, ROWS = 20, CELL = 10, BX = 122, BY = 10;
+    const SHAPES = {
+      I: { cells: [{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 3, y: 1 }], col: ACC },
+      O: { cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }], col: INK },
+      T: { cells: [{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }, { x: 1, y: 0 }], col: INK },
+      S: { cells: [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }], col: ACC },
+      Z: { cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 1 }], col: INK },
+      J: { cells: [{ x: 0, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }], col: ACC },
+      L: { cells: [{ x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 }], col: INK },
+    };
+    const KEYS = Object.keys(SHAPES);
+    let state = "ready", hi = loadHi("tetris");
+    let board, piece, nextKey, dropT, lines, score, level, soft;
+    const empty = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    const rk = () => KEYS[ri(KEYS.length)];
+    function collide(cells, ox, oy) {
+      for (const c of cells) {
+        const x = ox + c.x, y = oy + c.y;
+        if (x < 0 || x >= COLS || y >= ROWS) return true;
+        if (y >= 0 && board[y][x]) return true;
+      }
+      return false;
+    }
+    function spawn() {
+      const key = nextKey || rk(); nextKey = rk();
+      const s = SHAPES[key];
+      piece = { col: s.col, cells: s.cells.map((c) => ({ ...c })), x: 3, y: 0 };
+      if (collide(piece.cells, piece.x, piece.y)) { state = "over"; if (score > hi) { hi = score; saveHi("tetris", hi); } }
+    }
+    function reset() { board = empty(); score = 0; lines = 0; level = 1; dropT = 0; soft = false; nextKey = rk(); state = "ready"; spawn(); }
+    function rotate() {
+      const r = piece.cells.map((c) => ({ x: -c.y, y: c.x }));
+      const mnx = Math.min(...r.map((c) => c.x)), mny = Math.min(...r.map((c) => c.y));
+      const norm = r.map((c) => ({ x: c.x - mnx, y: c.y - mny }));
+      for (const k of [0, -1, 1, -2, 2]) if (!collide(norm, piece.x + k, piece.y)) { piece.cells = norm; piece.x += k; return; }
+    }
+    function lock() {
+      for (const c of piece.cells) {
+        const x = piece.x + c.x, y = piece.y + c.y;
+        if (y < 0) { state = "over"; if (score > hi) { hi = score; saveHi("tetris", hi); } return; }
+        board[y][x] = piece.col;
+      }
+      let cleared = 0;
+      for (let y = ROWS - 1; y >= 0; y--) if (board[y].every((v) => v)) { board.splice(y, 1); board.unshift(Array(COLS).fill(null)); cleared++; y++; }
+      if (cleared) { score += [0, 100, 300, 500, 800][cleared] * level; lines += cleared; level = Math.floor(lines / 10) + 1; }
+      spawn();
+    }
+    function step() { if (collide(piece.cells, piece.x, piece.y + 1)) lock(); else piece.y++; }
+    function press() {
+      if (state === "ready" || state === "over") { reset(); state = "running"; return; }
+      while (!collide(piece.cells, piece.x, piece.y + 1)) piece.y++;
+      lock();
+    }
+    function key(c, down) {
+      if (state !== "running") return;
+      if (down) {
+        if (c === "ArrowLeft" || c === "KeyA") { if (!collide(piece.cells, piece.x - 1, piece.y)) piece.x--; }
+        else if (c === "ArrowRight" || c === "KeyD") { if (!collide(piece.cells, piece.x + 1, piece.y)) piece.x++; }
+        else if (c === "ArrowUp" || c === "KeyW") rotate();
+        else if (c === "ArrowDown" || c === "KeyS") soft = true;
+      } else if (c === "ArrowDown" || c === "KeyS") soft = false;
+    }
+    function swipe(d) {
+      if (state !== "running") return;
+      if (d === "L") { if (!collide(piece.cells, piece.x - 1, piece.y)) piece.x--; }
+      else if (d === "R") { if (!collide(piece.cells, piece.x + 1, piece.y)) piece.x++; }
+      else if (d === "U") rotate(); else step();
+    }
+    function move() {}
+    function update(dt) {
+      if (state !== "running") return;
+      dropT += dt;
+      const interval = soft ? 0.05 : Math.max(0.08, 0.6 - (level - 1) * 0.05);
+      if (dropT >= interval) { dropT = 0; step(); }
+    }
+    function cell(x, y, col) { ctx.fillStyle = col; rr(BX + x * CELL + 0.5, BY + y * CELL + 0.5, CELL - 1, CELL - 1, 2); }
+    function draw() {
+      ctx.strokeStyle = FAINT; ctx.globalAlpha = 0.4; ctx.lineWidth = 1;
+      ctx.strokeRect(BX - 1, BY - 1, COLS * CELL + 2, ROWS * CELL + 2); ctx.globalAlpha = 1;
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (board[y][x]) cell(x, y, board[y][x]);
+      if (piece) {
+        let gy = piece.y; while (!collide(piece.cells, piece.x, gy + 1)) gy++;
+        ctx.globalAlpha = 0.16; for (const c of piece.cells) if (gy + c.y >= 0) cell(piece.x + c.x, gy + c.y, piece.col); ctx.globalAlpha = 1;
+        for (const c of piece.cells) if (piece.y + c.y >= 0) cell(piece.x + c.x, piece.y + c.y, piece.col);
+      }
+      const px = BX + COLS * CELL + 34;
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = FAINT; ctx.font = '600 11px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText("NEXT", px, BY + 14);
+      const ns = SHAPES[nextKey], nmx = Math.min(...ns.cells.map((c) => c.x)), nmy = Math.min(...ns.cells.map((c) => c.y));
+      ctx.fillStyle = ns.col;
+      for (const c of ns.cells) rr(px + (c.x - nmx) * CELL + 0.5, BY + 24 + (c.y - nmy) * CELL + 0.5, CELL - 1, CELL - 1, 2);
+      ctx.fillStyle = INK; ctx.font = '700 14px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText("SCORE " + score, px, BY + 92);
+      ctx.fillStyle = FAINT; ctx.font = '600 12px "Hanken Grotesk", system-ui, sans-serif';
+      ctx.fillText("LEVEL " + level, px, BY + 114);
+      ctx.fillText("LINES " + lines, px, BY + 132);
+      if (hi > 0) ctx.fillText("HI " + hi, px, BY + 150);
+      if (state === "ready") banner("TETRIS", "arrows move · ↑ rotate · space drop");
+      else if (state === "over") banner("GAME OVER");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to restart"
+        : state === "ready" ? "← → move · ↑ rotate · ↓ soft drop · space hard drop"
+          : "← → move · ↑ rotate · ↓ drop · space hard drop";
+    }
+    reset();
+    return { title: "Tetris", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- FLAPPY ---------------- */
+  function makeFlappy() {
+    const GY = H - 18, BX = 120, BW = 26, BH = 20, GAP = 80, PW = 46, SPACING = 230;
+    let state = "ready", hi = loadHi("flappy");
+    let by, vy, pipes, score, speed, wing;
+    const makePipe = (x) => ({ x, gy: rand(26, GY - 26 - GAP), passed: false });
+    function reset() {
+      by = H / 2; vy = 0; score = 0; speed = 150; wing = 0; pipes = [];
+      for (let i = 0; i < 3; i++) pipes.push(makePipe(W + 120 + i * SPACING));
+      state = "ready";
+    }
+    function flap() { vy = -360; }
+    function over() { if (state === "running") { state = "over"; if (score > hi) { hi = score; saveHi("flappy", hi); } } }
+    function press() {
+      if (state === "ready") { state = "running"; flap(); }
+      else if (state === "over") { reset(); state = "running"; flap(); }
+      else flap();
+    }
+    function key(c, down) { if (down && (c === "ArrowUp" || c === "KeyW")) press(); }
+    function swipe(d) { if (d === "U") press(); }
+    function move() {}
+    function update(dt) {
+      wing += dt;
+      if (state !== "running") return;
+      speed = Math.min(260, speed + 4 * dt);
+      vy += 1500 * dt; by += vy * dt;
+      for (const p of pipes) p.x -= speed * dt;
+      if (pipes[0].x + PW < 0) { pipes.shift(); pipes.push(makePipe(pipes[pipes.length - 1].x + SPACING)); }
+      const x0 = BX - BW / 2, x1 = BX + BW / 2, y0 = by - BH / 2, y1 = by + BH / 2;
+      if (y1 >= GY || y0 <= 2) over();
+      for (const p of pipes) {
+        if (!p.passed && p.x + PW < BX) { p.passed = true; score++; }
+        if (x1 > p.x && x0 < p.x + PW && (y0 < p.gy || y1 > p.gy + GAP)) over();
+      }
+    }
+    function draw() {
+      ctx.fillStyle = INK;
+      for (const p of pipes) {
+        rr(p.x, 2, PW, p.gy - 2, 4); rr(p.x - 3, p.gy - 13, PW + 6, 13, 4);
+        rr(p.x, p.gy + GAP, PW, GY - (p.gy + GAP), 4); rr(p.x - 3, p.gy + GAP, PW + 6, 13, 4);
+      }
+      ctx.strokeStyle = FAINT; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, GY + 1); ctx.lineTo(W, GY + 1); ctx.stroke();
+      const x = BX, y = by;
+      ctx.fillStyle = ACC; rr(x - BW / 2, y - BH / 2, BW, BH, 6);
+      ctx.fillStyle = INK; ctx.fillRect(x + BW / 2 - 3, y - 2, 7, 5);
+      const up = Math.floor(wing * 8) % 2 === 0;
+      ctx.fillRect(x - BW / 2 + 3, up ? y - 2 : y + 3, 11, 5);
+      ctx.fillStyle = CREAM; ctx.fillRect(x + 3, y - 6, 4, 4);
+      hud(score, hi);
+      if (state === "ready") banner("FLAPPY", "space, tap or ↑ to flap");
+      else if (state === "over") banner("GAME OVER");
+    }
+    function hint() {
+      return state === "over" ? "Game over · space or tap to restart"
+        : state === "ready" ? "Space, tap or ↑ to flap" : "Flap to stay airborne";
+    }
+    reset();
+    return { title: "Flappy", reset, press, key, move, swipe, update, draw, hint };
+  }
+
+  /* ---------------- shell ---------------- */
+  const games = [makeDino(), makeSnake(), makeBreakout(), makePong(), makeTetris(), makeFlappy()];
+  let cur = games[0], last = 0;
+
+  games.forEach((g, i) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.type = "button"; b.textContent = g.title;
+    b.setAttribute("role", "tab");
+    b.addEventListener("click", () => { select(i); b.blur(); });
+    g._btn = b; tabsEl.appendChild(b);
+  });
+  function select(i) {
+    cur = games[i];
+    games.forEach((g) => g._btn.classList.toggle("is-active", g === cur));
+    games.forEach((g) => g._btn.setAttribute("aria-selected", g === cur));
+    cur.reset(); last = 0; hintEl.textContent = cur.hint();
+  }
+
+  const KEYS = ["Space", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"];
+  window.addEventListener("keydown", (e) => {
+    if (!KEYS.includes(e.code)) return;
+    e.preventDefault();
+    if (e.code === "Space" || e.code === "Enter") cur.press();
+    else cur.key(e.code, true);
+  });
+  window.addEventListener("keyup", (e) => { if (KEYS.includes(e.code)) cur.key(e.code, false); });
+
+  function xy(e) {
+    const r = cv.getBoundingClientRect();
+    return [(e.clientX - r.left) * (W / r.width), (e.clientY - r.top) * (H / r.height)];
+  }
+  let pdown = null;
+  cv.addEventListener("pointerdown", (e) => { e.preventDefault(); pdown = xy(e); cur.move(pdown[0], pdown[1]); });
+  cv.addEventListener("pointermove", (e) => { const [x, y] = xy(e); cur.move(x, y); });
+  cv.addEventListener("pointerup", (e) => {
+    if (!pdown) return;
+    const [x, y] = xy(e), dx = x - pdown[0], dy = y - pdown[1];
+    if (Math.hypot(dx, dy) < 16) cur.press(x, y);
+    else cur.swipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "R" : "L") : (dy > 0 ? "D" : "U"));
+    pdown = null;
+  });
+
+  function loop(ts) {
+    if (!last) last = ts;
+    let dt = (ts - last) / 1000; last = ts; if (dt > 0.05) dt = 0.05;
+    cur.update(dt);
+    ctx.clearRect(0, 0, W, H);
+    cur.draw();
+    hintEl.textContent = cur.hint();
+    requestAnimationFrame(loop);
+  }
+  select(0);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
